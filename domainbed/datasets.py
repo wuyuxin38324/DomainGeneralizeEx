@@ -1,6 +1,9 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
 import os
+
+import cv2
+import numpy as np
 import torch
 from PIL import Image, ImageFile
 from torchvision import transforms
@@ -54,7 +57,7 @@ def num_environments(dataset_name):
 class MultipleDomainDataset:
     N_STEPS = 5001           # Default, subclasses may override
     CHECKPOINT_FREQ = 100    # Default, subclasses may override
-    N_WORKERS = 2            # Default, subclasses may override[modified(8-->2) by Alex Wu]
+    N_WORKERS = 0            # Default, subclasses may override[modified(8-->0) by Alex Wu]
     ENVIRONMENTS = None      # Subclasses should override
     INPUT_SHAPE = None       # Subclasses should override
 
@@ -183,6 +186,18 @@ class RotatedMNIST(MultipleEnvironmentMNIST):
         return TensorDataset(x, y)
 
 
+class CannyTransform:
+    def __init__(self, threshold1=100, threshold2=200):
+        self.threshold1 = threshold1
+        self.threshold2 = threshold2
+
+    def __call__(self, img):
+        img = np.array(img)
+        edges = cv2.Canny(img, self.threshold1, self.threshold2)
+        edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+        return Image.fromarray(edges)
+
+
 class MultipleEnvironmentImageFolder(MultipleDomainDataset):
     def __init__(self, root, test_envs, augment, hparams):
         super().__init__()
@@ -190,6 +205,14 @@ class MultipleEnvironmentImageFolder(MultipleDomainDataset):
         environments = sorted(environments)
 
         transform = transforms.Compose([
+            transforms.Resize((224,224)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+        transform_canny = transforms.Compose([
+            CannyTransform(),
             transforms.Resize((224,224)),
             transforms.ToTensor(),
             transforms.Normalize(
@@ -212,6 +235,8 @@ class MultipleEnvironmentImageFolder(MultipleDomainDataset):
 
             if augment and (i not in test_envs):
                 env_transform = augment_transform
+            elif i not in test_envs:
+                env_transform = transform_canny
             else:
                 env_transform = transform
 
