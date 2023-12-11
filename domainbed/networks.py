@@ -1,5 +1,5 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-
+import cv2
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -72,7 +72,7 @@ class ResNet(torch.nn.Module):
         super(ResNet, self).__init__()
         if hparams['resnet18']:
             self.network = torchvision.models.resnet18(pretrained=True)
-            self.n_outputs = 512
+            self.n_outputs = 513
         else:
             self.network = torchvision.models.resnet50(pretrained=True)
             self.n_outputs = 2048
@@ -101,7 +101,10 @@ class ResNet(torch.nn.Module):
 
     def forward(self, x):
         """Encode x into a feature vector of size n_outputs."""
-        return self.dropout(self.network(x))
+        resnet_features = self.network(x)
+        canny_features = self.compute_canny_features(x)
+        combined_features = torch.cat([resnet_features, canny_features], dim=1)
+        return self.dropout(combined_features)
 
     def train(self, mode=True):
         """
@@ -114,6 +117,21 @@ class ResNet(torch.nn.Module):
         for m in self.network.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.eval()
+
+    def compute_canny_features(self, x):
+        gray_images = torch.mean(x, dim=1, keepdim=True)
+        canny_images = torch.zeros_like(gray_images, dtype=torch.uint8)
+
+        for i in range(x.size(0)):
+            for j in range(x.size(1)):
+                normalized_image = ((x[i, j] - x[i, j].min()) / (x[i, j].max() - x[i, j].min()) * 255).to(torch.uint8)
+                edges = cv2.Canny(normalized_image.squeeze().cpu().numpy(), 100, 200)
+                canny_images[i, 0, :, :] = torch.tensor(edges, dtype=torch.float32)
+
+        canny_features = canny_images.float()
+        canny_features = F.adaptive_avg_pool2d(canny_features, (1, 1))
+
+        return canny_features.squeeze(-1).squeeze(-1)
 
 
 class MNIST_CNN(nn.Module):
