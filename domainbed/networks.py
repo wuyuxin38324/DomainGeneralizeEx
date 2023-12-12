@@ -72,7 +72,7 @@ class ResNet(torch.nn.Module):
         super(ResNet, self).__init__()
         if hparams['resnet18']:
             self.network = torchvision.models.resnet18(pretrained=True)
-            self.n_outputs = 513
+            self.n_outputs = 512
         else:
             self.network = torchvision.models.resnet50(pretrained=True)
             self.n_outputs = 2048
