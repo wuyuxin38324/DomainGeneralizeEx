@@ -98,13 +98,13 @@ class ResNet(torch.nn.Module):
         self.freeze_bn()
         self.hparams = hparams
         self.dropout = nn.Dropout(hparams['resnet_dropout'])
+        self.fusion_weight = 0
 
     def forward(self, x):
         """Encode x into a feature vector of size n_outputs."""
-        resnet_features = self.network(x)
         canny_features = self.compute_canny_features(x)
-        combined_features = torch.cat([resnet_features, canny_features], dim=1)
-        return self.dropout(combined_features)
+        x += canny_features * fusion_weight
+        return self.dropout(self.network(x))
 
     def train(self, mode=True):
         """
@@ -119,19 +119,17 @@ class ResNet(torch.nn.Module):
                 m.eval()
 
     def compute_canny_features(self, x):
-        gray_images = torch.mean(x, dim=1, keepdim=True)
-        canny_images = torch.zeros_like(gray_images, dtype=torch.uint8)
+        canny_images = torch.zeros_like(x, dtype=torch.uint8)
 
         for i in range(x.size(0)):
             for j in range(x.size(1)):
                 normalized_image = ((x[i, j] - x[i, j].min()) / (x[i, j].max() - x[i, j].min()) * 255).to(torch.uint8)
                 edges = cv2.Canny(normalized_image.squeeze().cpu().numpy(), 100, 200)
-                canny_images[i, 0, :, :] = torch.tensor(edges, dtype=torch.float32)
+                canny_images[i, j, :, :] = torch.tensor(edges, dtype=torch.float32)
 
         canny_features = canny_images.float()
-        canny_features = F.adaptive_avg_pool2d(canny_features, (1, 1))
 
-        return canny_features.squeeze(-1).squeeze(-1)
+        return canny_features
 
 
 class MNIST_CNN(nn.Module):
