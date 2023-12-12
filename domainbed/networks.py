@@ -103,7 +103,7 @@ class ResNet(torch.nn.Module):
     def forward(self, x):
         """Encode x into a feature vector of size n_outputs."""
         canny_features = self.compute_canny_features(x)
-        x += canny_features * fusion_weight
+        x += canny_features * self.fusion_weight
         return self.dropout(self.network(x))
 
     def train(self, mode=True):
