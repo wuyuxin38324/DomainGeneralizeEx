@@ -57,7 +57,7 @@ def num_environments(dataset_name):
 class MultipleDomainDataset:
     N_STEPS = 5001           # Default, subclasses may override
     CHECKPOINT_FREQ = 100    # Default, subclasses may override
-    N_WORKERS = 0            # Default, subclasses may override[modified(8-->0) by Alex Wu]
+    N_WORKERS = 0            # Default, subclasses may override[modified(8-->2) by Alex Wu]
     ENVIRONMENTS = None      # Subclasses should override
     INPUT_SHAPE = None       # Subclasses should override
 
@@ -195,7 +195,8 @@ class CannyTransform:
         img = np.array(img)
         edges = cv2.Canny(img, self.threshold1, self.threshold2)
         edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
-        return Image.fromarray(edges)
+        enhance_img = (img * 0.8 + edges * 0.2).astype(np.uint8)
+        return Image.fromarray(enhance_img)
 
 
 class MultipleEnvironmentImageFolder(MultipleDomainDataset):
@@ -213,7 +214,7 @@ class MultipleEnvironmentImageFolder(MultipleDomainDataset):
 
         transform_canny = transforms.Compose([
             CannyTransform(),
-            transforms.Resize((224,224)),
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
