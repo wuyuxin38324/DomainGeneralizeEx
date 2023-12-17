@@ -93,6 +93,7 @@ class ERM(Algorithm):
         super(ERM, self).__init__(input_shape, num_classes, num_domains,
                                   hparams)
         self.featurizer = networks.Featurizer(input_shape, self.hparams)
+        self.num_domains = num_domains
         self.classifier = networks.Classifier(
             self.featurizer.n_outputs,
             num_classes,
@@ -108,7 +109,28 @@ class ERM(Algorithm):
     def update(self, minibatches, unlabeled=None):
         all_x = torch.cat([x for x, y in minibatches])
         all_y = torch.cat([y for x, y in minibatches])
-        loss = F.cross_entropy(self.predict(all_x), all_y)
+        logits = self.predict(all_x)
+        loss = F.cross_entropy(logits, all_y)
+
+        # 领域正则化
+        domain_loss = 0.0
+        if torch.cuda.is_available():
+            device = "cuda"  # device = "cuda"  device = torch.device("cuda:2")
+        else:
+            device = "cpu"
+        for x, _ in minibatches:
+            domain_logits = self.predict(x)  # 预测领域标签
+            domain_labels = torch.ones(len(x)).long().to(device) * 4  # 创建目标域标签
+            domain_loss += F.cross_entropy(domain_logits, domain_labels)  # 使用交叉熵损失函数计算领域损失
+        loss += 0.0001 * domain_loss
+
+        # L2正则化
+        reg_loss = 0.0
+        for param in self.network.parameters():
+            reg_loss += torch.norm(param, p=2)  # 使用L2正则化项
+        loss += 0.001 * reg_loss
+
+
 
         self.optimizer.zero_grad()
         loss.backward()

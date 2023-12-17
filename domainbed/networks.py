@@ -1,5 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-
+import cv2
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -66,6 +67,24 @@ class MLP(nn.Module):
         return x
 
 
+class SEBlock(nn.Module):
+    def __init__(self, channels, reduction=16):
+        super(SEBlock, self).__init__()
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channels, channels // reduction, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Linear(channels // reduction, channels, bias=False),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y
+
+
 class ResNet(torch.nn.Module):
     """ResNet with the softmax chopped off and the batchnorm frozen"""
     def __init__(self, input_shape, hparams):
@@ -95,12 +114,21 @@ class ResNet(torch.nn.Module):
         del self.network.fc
         self.network.fc = Identity()
 
+        # Add SE-Net blocks
+        self.network.layer1[0].se = SEBlock(64)
+        # self.network.layer2[0].se = SEBlock(128)
+        # self.network.layer3[0].se = SEBlock(256)
+        self.network.layer4[0].se = SEBlock(512)
+
         self.freeze_bn()
         self.hparams = hparams
         self.dropout = nn.Dropout(hparams['resnet_dropout'])
+        # self.fusion_weight = 0.5
 
     def forward(self, x):
         """Encode x into a feature vector of size n_outputs."""
+        # canny_features = self.compute_canny_features(x)
+        # x += canny_features * self.fusion_weight
         return self.dropout(self.network(x))
 
     def train(self, mode=True):
@@ -114,6 +142,20 @@ class ResNet(torch.nn.Module):
         for m in self.network.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.eval()
+
+    def compute_canny_features(self, x):
+        canny_images = torch.zeros_like(x, dtype=torch.uint8)
+
+        for i in range(x.size(0)):
+            gray_image = 0.299 * x[i, 0] + 0.587 * x[i, 1] + 0.114 * x[i, 2]
+            gray_image = gray_image.numpy().astype(np.uint8)
+            edges = cv2.Canny(gray_image.squeeze().cpu().numpy(), 100, 200)
+            for j in range(x.size(1)):
+                canny_images[i, j, :, :] = torch.tensor(edges, dtype=torch.float32)
+
+        canny_features = canny_images.float()
+
+        return canny_features
 
 
 class MNIST_CNN(nn.Module):
