@@ -1,6 +1,11 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
 import os
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+
+import cv2
+import numpy as np
 import torch
 from PIL import Image, ImageFile
 from torchvision import transforms
@@ -54,7 +59,7 @@ def num_environments(dataset_name):
 class MultipleDomainDataset:
     N_STEPS = 5001           # Default, subclasses may override
     CHECKPOINT_FREQ = 100    # Default, subclasses may override
-    N_WORKERS = 2            # Default, subclasses may override[modified(8-->2) by Alex Wu]
+    N_WORKERS = 0            # Default, subclasses may override[modified(8-->2) by Alex Wu]
     ENVIRONMENTS = None      # Subclasses should override
     INPUT_SHAPE = None       # Subclasses should override
 
@@ -182,6 +187,18 @@ class RotatedMNIST(MultipleEnvironmentMNIST):
 
         return TensorDataset(x, y)
 
+class Equalized:
+    def __call__(self, img):
+        #img=np.array(img)
+        #result = cv2.GaussianBlur(img, (7,7), 0)
+        #return Image.fromarray(result)
+        img = np.array(img)
+        (b, g, r) = cv2.split(img)
+        bH = cv2.equalizeHist(b)
+        gH = cv2.equalizeHist(g)
+        rH = cv2.equalizeHist(r)
+        result = cv2.merge((bH, gH, rH))
+        return Image.fromarray(result)
 
 class MultipleEnvironmentImageFolder(MultipleDomainDataset):
     def __init__(self, root, test_envs, augment, hparams):
@@ -207,11 +224,21 @@ class MultipleEnvironmentImageFolder(MultipleDomainDataset):
                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
+        transform_Equalized = transforms.Compose([
+            Equalized(),
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
         self.datasets = []
         for i, environment in enumerate(environments):
 
             if augment and (i not in test_envs):
                 env_transform = augment_transform
+            elif i not in test_envs:
+                env_transform = transform_Equalized
             else:
                 env_transform = transform
 
