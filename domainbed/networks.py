@@ -123,12 +123,9 @@ class ResNet(torch.nn.Module):
         self.freeze_bn()
         self.hparams = hparams
         self.dropout = nn.Dropout(hparams['resnet_dropout'])
-        # self.fusion_weight = 0.5
 
     def forward(self, x):
         """Encode x into a feature vector of size n_outputs."""
-        # canny_features = self.compute_canny_features(x)
-        # x += canny_features * self.fusion_weight
         return self.dropout(self.network(x))
 
     def train(self, mode=True):
@@ -142,20 +139,6 @@ class ResNet(torch.nn.Module):
         for m in self.network.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.eval()
-
-    def compute_canny_features(self, x):
-        canny_images = torch.zeros_like(x, dtype=torch.uint8)
-
-        for i in range(x.size(0)):
-            gray_image = 0.299 * x[i, 0] + 0.587 * x[i, 1] + 0.114 * x[i, 2]
-            gray_image = gray_image.numpy().astype(np.uint8)
-            edges = cv2.Canny(gray_image.squeeze().cpu().numpy(), 100, 200)
-            for j in range(x.size(1)):
-                canny_images[i, j, :, :] = torch.tensor(edges, dtype=torch.float32)
-
-        canny_features = canny_images.float()
-
-        return canny_features
 
 
 class MNIST_CNN(nn.Module):
