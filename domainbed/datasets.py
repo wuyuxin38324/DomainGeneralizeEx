@@ -1,6 +1,9 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
 import os
+
+import cv2
+import numpy as np
 import torch
 from PIL import Image, ImageFile
 from torchvision import transforms
@@ -183,6 +186,33 @@ class RotatedMNIST(MultipleEnvironmentMNIST):
         return TensorDataset(x, y)
 
 
+class CannyTransform:
+    def __init__(self, threshold1=100, threshold2=200):
+        self.threshold1 = threshold1
+        self.threshold2 = threshold2
+
+    def __call__(self, img):
+        img = np.array(img)
+        edges = cv2.Canny(img, self.threshold1, self.threshold2)
+        edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2RGB)
+        enhance_img = (img * 0.8 + edges * 0.2).astype(np.uint8)
+        return Image.fromarray(enhance_img)
+
+
+class Equalized:
+    def __call__(self, img):
+        # img=np.array(img)
+        # result = cv2.GaussianBlur(img, (7,7), 0)
+        # return Image.fromarray(result)
+        img = np.array(img)
+        (b, g, r) = cv2.split(img)
+        bH = cv2.equalizeHist(b)
+        gH = cv2.equalizeHist(g)
+        rH = cv2.equalizeHist(r)
+        result = cv2.merge((bH, gH, rH))
+        return Image.fromarray(result)
+
+
 class MultipleEnvironmentImageFolder(MultipleDomainDataset):
     def __init__(self, root, test_envs, augment, hparams):
         super().__init__()
@@ -191,6 +221,15 @@ class MultipleEnvironmentImageFolder(MultipleDomainDataset):
 
         transform = transforms.Compose([
             transforms.Resize((224,224)),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+        transform_CaEq = transforms.Compose([
+            Equalized(),
+            CannyTransform(),
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
@@ -212,6 +251,8 @@ class MultipleEnvironmentImageFolder(MultipleDomainDataset):
 
             if augment and (i not in test_envs):
                 env_transform = augment_transform
+            elif i not in test_envs:
+                env_transform = transform_CaEq
             else:
                 env_transform = transform
 
