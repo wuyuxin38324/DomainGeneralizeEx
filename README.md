@@ -1,6 +1,18 @@
 # DomainGeneralizeEx
 image anal &amp; machine vision --2023Fall
 
+## Env during running
+```
+Python: 3.10.12
+PyTorch: 2.1.0+cu121
+Torchvision: 0.16.0+cu121
+CUDA: 12.1
+CUDNN: 8902
+NumPy: 1.23.5
+PIL: 9.4.0
+opencv-python: 4.8.1.78
+```
+
 ## To download the PACS dataset
 ```
 python  ./domainbed/scripts/download.py \
